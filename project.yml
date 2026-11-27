@@ -1,0 +1,23 @@
+# Nur nötig, falls du Xcode 15 oder älter hast:  brew install xcodegen && xcodegen
+name: FrameCut
+options:
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  FrameCut:
+    type: application
+    platform: iOS
+    sources: [FrameCut]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.deinname.framecut
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_CFBundleDisplayName: FrameCut
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "FrameCut importiert deine Videos in Originalqualität."
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "FrameCut speichert deine fertigen Videos in der Fotos-App."
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
