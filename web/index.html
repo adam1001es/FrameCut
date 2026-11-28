@@ -35,11 +35,13 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .stage{position:relative;overflow:hidden;min-height:0;background:radial-gradient(120% 90% at 50% 40%,#17171b,#08080a)}
 .frame{position:absolute;inset:12px;transition:bottom .22s ease}
 .work.po .frame{bottom:calc(50% + 10px)}
-#out{width:100%;height:100%;object-fit:contain;display:block;filter:drop-shadow(0 18px 40px rgba(0,0,0,.6))}
+#out{width:100%;height:100%;object-fit:contain;display:block}
 .empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:24px}
 .empty .drop{max-width:440px;padding:34px 26px;border:1.5px dashed #3a3a42;border-radius:22px;background:rgba(255,255,255,.02)}
 .empty h1{font-size:clamp(30px,6vw,44px);line-height:1.05;margin:14px 0 10px;letter-spacing:-.02em;text-wrap:balance}
 .empty p{color:var(--mute);margin:0 0 22px}
+.empty p.tip{font-size:13px;margin:-8px 0 20px;padding:10px 12px;border-radius:12px;background:rgba(250,204,21,.08);color:#e9e2c2;text-align:left}
+.empty p.tip b{color:var(--acc)}
 .empty.drag .drop{border-color:var(--acc);background:rgba(250,204,21,.06)}
 .panel{position:absolute;left:0;right:0;bottom:0;max-height:50%;overflow:auto;background:var(--bg2);border-top:1px solid var(--line);border-radius:18px 18px 0 0;padding:6px 18px 22px;transform:translateY(105%);transition:transform .22s ease;z-index:5;box-shadow:0 -20px 50px rgba(0,0,0,.5)}
 .panel.open{transform:none}
@@ -137,6 +139,7 @@ textarea,.field{width:100%;min-height:44px;padding:10px 12px;border-radius:12px;
             <svg width="64" height="64" viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="6" width="24" height="16" rx="4" fill="#facc15"/><path d="M11.5 10.5v7l6-3.5z" fill="#141418"/></svg>
             <h1>Neues Projekt</h1>
             <p>Videos hier hineinziehen oder auswählen. Alles bleibt auf deinem Gerät, nichts wird hochgeladen. Läuft auf iPhone, iPad, Mac und PC.</p>
+            <p class="tip"><b>iPhone-Tipp für volle Qualität:</b> Video in der Fotos-App über Teilen → „In Dateien sichern“ ablegen und hier über „Durchsuchen“ wählen. Direkt aus „Fotos“ verkleinert iOS es auf 720p.</p>
             <label class="btn pri"><input type="file" id="imp2" accept="video/*,.mov,.mp4,.m4v,.webm" multiple hidden>Videos auswählen</label>
           </div>
         </div>
@@ -323,9 +326,12 @@ function makeThumb(el) {
       if (done) return; done = true;
       try { const c = document.createElement('canvas'), h = 96; c.height = h; c.width = Math.max(1, Math.round(h * el.videoWidth / el.videoHeight)); c.getContext('2d').drawImage(el, 0, 0, c.width, h); res(c.toDataURL('image/jpeg', .7)); } catch (e) { res(''); }
     };
-    el.addEventListener('seeked', fin, {once: true});
-    setTimeout(fin, 2500);
-    try { el.currentTime = Math.min(0.2, (el.duration || 1) / 2); } catch (e) { fin(); }
+    el.addEventListener('seeked', () => setTimeout(fin, 60), {once: true});
+    setTimeout(fin, 3000);
+    const go = () => { try { el.currentTime = Math.min(0.2, (el.duration || 1) / 2); } catch (e) { fin(); } };
+    el.muted = true;
+    const p = el.play();
+    if (p) p.then(() => { el.pause(); el.muted = false; go(); }).catch(() => { el.muted = false; go(); }); else { el.muted = false; go(); }
   });
 }
 async function importFiles(list) {
@@ -342,6 +348,8 @@ async function importFiles(list) {
     } catch (e) { toast(`${file.name}: ${e.message}`); }
   }
   busy(null); commit(); renderAll();
+  const small = S.clips.some(c => F[c.f] && F[c.f].kind === 'video' && Math.max(F[c.f].w, F[c.f].h) <= 1280);
+  if (small && IOS) openPanel('lowres');
 }
 async function setMusic(file) {
   busy('Lade Musik …');
@@ -420,7 +428,7 @@ function loop() {
 
 /* ---------- frame renderer ---------- */
 const out = $('#out'), ctx = out.getContext('2d');
-const PREVIEW = 1280;
+const PREVIEW = 960;
 function render() {
   const R = renderSize(), sc = exporting ? 1 : Math.min(1, PREVIEW / Math.max(R.w, R.h));
   const W = Math.round(R.w * sc), H = Math.round(R.h * sc);
@@ -433,7 +441,7 @@ function render() {
       const s = Math.min(W / v.videoWidth, H / v.videoHeight), dw = Math.round(v.videoWidth * s), dh = Math.round(v.videoHeight * s);
       let src = v;
       if (GL && hasLook(c)) src = GL.draw(v, c.filter, c.adj, dw, dh) || v;
-      ctx.imageSmoothingQuality = 'high';
+      ctx.imageSmoothingQuality = exporting ? 'high' : 'low';
       ctx.drawImage(src, (W - dw) / 2, (H - dh) / 2, dw, dh);
     }
   }
@@ -582,7 +590,16 @@ function filterThumb(c, key) {
   img.onload = () => { const cv = GL.draw(img, key, ADJ0, 120, Math.round(120 * img.height / img.width)); if (cv) { filterThumbs[k] = cv.toDataURL('image/jpeg', .8); if (panelName === 'filter') renderPanel(); } };
   return f.thumb;
 }
+const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const PANELS = {
+  lowres() {
+    const c = S.clips.find(x => F[x.f] && Math.max(F[x.f].w, F[x.f].h) <= 1280), f = c && F[c.f];
+    return head('Video wurde verkleinert') + `<p>Dieses Video ist nur <b>${f ? f.w + '×' + f.h : '720p'}</b> groß. iOS verkleinert Videos automatisch, wenn man sie in Safari direkt aus „Fotos“ auswählt. FrameCut kann das nicht verhindern.</p>
+      <p><b>So bekommst du die volle Qualität:</b></p>
+      <p class="hint">1. Fotos-App öffnen → Video → Teilen → <b>„In Dateien sichern“</b><br>2. Hier auf <b>+</b> tippen → <b>„Durchsuchen“</b> (nicht „Fotomediathek“) → Video wählen</p>
+      <p class="hint">Für 100 % Originalqualität ohne jede Neukodierung nimm die iPhone-App aus dem Repo, die kann das direkt.</p>
+      <div class="btns"><button class="btn" data-a="close">Verstanden</button></div>`;
+  },
   trim() {
     const c = selClip(); if (!c) return head('Trimmen') + noClip; const d = F[c.f].dur;
     return head('Trimmen') + sl('Anfang', 'clip.start', 0, d, .01, c.start, 'tc') + sl('Ende', 'clip.end', 0, d, .01, c.end, 'tc')
